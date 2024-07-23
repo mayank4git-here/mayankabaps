@@ -1,0 +1,1111 @@
+*&---------------------------------------------------------------------*
+*& Report ZBP_CHANGE
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zbp_change.
+
+TYPES : BEGIN OF st ,
+          slno(5),                      " Serial No...
+          bpno           TYPE bu_partner,
+          ktokk          TYPE ktokk,    " CREATION_GROUP
+          anred          TYPE anred,    " TITLE_MEDI
+          name1          TYPE name1,    " Name_ORG1
+          name2          TYPE name2,    " Name_ORG2
+          name3          TYPE name2,    " Name3
+          name4          TYPE name4,    " Name4
+          sortl          TYPE sortl,    " BU_SORT1_TXT
+          sort2          TYPE char10,
+          street1        TYPE ad_strspp1, " STREET1
+          street2        TYPE ad_strspp2, " STREET2
+          stras          TYPE stras,    " Street
+          street3        TYPE ad_strspp3, " STREET3
+          pstlz          TYPE pstlz,    " LFA1 post
+          ort01          TYPE ort01,    " LFA1 City
+          land1          TYPE land1,    " LFA1 Country
+          regio          TYPE regio,    " LFA1 ERegio
+          telf1          TYPE telf1,    " LFA1 Tel
+          telf2          TYPE telf2,    " LFA1 Cell mobile
+          telfx          TYPE telfx,    " Fax Number
+          smtp_addr      TYPE ad_smtpadr, " ADR6-SMTP_ADDR E-Mail Address
+          partnerrole1   TYPE bapibus1006_bproles-partnerrole,
+          partnerrole2   TYPE bapibus1006_bproles-partnerrole,
+          partnerrole3   TYPE bapibus1006_bproles-partnerrole,
+          industry(50),
+          bu_isdef(1),
+          taxnumber      TYPE stcd3, "(20), " GST
+          j_1ipanno      TYPE j_1ipanno,
+          banks          TYPE banks,
+          bankl          TYPE bankl,
+          bankn          TYPE bankn,
+          cntrl_key(50) ," TYPE CNTRL_KEY,
+          swift_code(50) , " TYPE SWIFT_CODE,
+          accname        TYPE bankn,
+          bkref          TYPE bkref,
+          koinh          TYPE koinh_fi,
+          branch(40) , " TYPE BRANCH,
+          qssys          TYPE qssys,
+          qssysdat       TYPE char10,
+          bukrs          TYPE bukrs,      " BUKRS
+          akont          TYPE akont,      " Reconciliation Account in General Ledger
+          zuawa          TYPE char3,
+          fdgrv          TYPE fdgrv,
+          qland          TYPE qland,
+          zterm          TYPE dzterm,      " ZTERMS
+          reprf          TYPE reprf,
+          zwels          TYPE char10 , "ZWELS,
+          ekorg          TYPE ekorg,      " gv_purchasing_or(4)
+          waers          TYPE waers,      " LFM1 Currency
+          inco1          TYPE inco1,      " ILFM1 NCO_Term1
+          inco_l         TYPE inco_l,    " LFM1
+          kalsk          TYPE kalsk,
+          webre          TYPE webre,
+          xersr          TYPE xersr,
+          xersy          TYPE xersy,
+*          J_1IPANNO      TYPE J_1IPANNO,
+          j_1igtakld     TYPE j_1igtakld,
+          ktokk1         TYPE char4,
+          parvw1         TYPE char2,
+          parvw2         TYPE char2,
+
+        END OF st.
+
+TYPES : BEGIN OF ty_out ,
+          sno TYPE char3.
+          INCLUDE TYPE bapiret2 .
+TYPES: END OF ty_out .
+
+DATA : lt_out TYPE TABLE OF ty_out,
+       ls_out TYPE ty_out.
+DATA : lt_data TYPE TABLE OF st,
+       wa_data TYPE st.
+
+
+
+DATA: lt_contacts     TYPE vmds_ei_contacts_t,
+      ls_contacts     TYPE vmds_ei_contacts,
+      lt_vendors      TYPE vmds_ei_extern_t,
+      ls_vendors      TYPE vmds_ei_extern,
+      ls_cont_add     TYPE cvis_ei_address3,
+      ls_address      TYPE cvis_ei_address1,
+      lt_company      TYPE vmds_ei_company_t,
+      ls_company      TYPE vmds_ei_company,
+      ls_company_data TYPE vmds_ei_vmd_company,
+      ls_sales_data   TYPE vmds_ei_vmd_purchasing,
+      lt_sales        TYPE vmds_ei_purchasing_t,
+      ls_sales        TYPE vmds_ei_purchasing,
+      lt_sales_func   TYPE vmds_ei_functions_t,
+      ls_sales_func   TYPE vmds_ei_functions,
+      ls_message      TYPE cvis_message,
+      lv_contactid    TYPE bapicontact_01-contact,
+
+      lt_phones       TYPE cvis_ei_phone_t,
+      wa_phones       LIKE LINE OF lt_phones,
+
+      lt_wtax         TYPE cmds_ei_wtax_type_t,
+      ls_wtax         LIKE LINE OF lt_wtax,
+
+      ls_wtax_type    TYPE cmds_ei_wtax_type_s,
+      lt_wtax_type_t  TYPE cmds_ei_wtax_type_t,
+      l_wtax_type     TYPE cmds_ei_wtax_type,
+
+
+      lt_fax          TYPE cvis_ei_fax_t,
+      wa_fax          LIKE LINE OF lt_fax,
+
+      lt_smtp         TYPE cvis_ei_smtp_t,
+      wa_smtp         LIKE LINE OF lt_smtp,
+
+      lt_bankdetail   TYPE cvis_ei_bankdetail_t,  "" Ext. Interface: Bank Data
+      wa_bankdetail   LIKE LINE OF lt_bankdetail,
+      ls_bank         TYPE  cvis_ei_bankdetail,
+      lv_email        TYPE ad_smtpadr,
+      lv_phone        TYPE tel_no, "ad_tlnmbr,
+      lv_cntry        TYPE ad_comctry,
+      it_phone        TYPE STANDARD TABLE OF bapiadtel,
+      it_phone2       TYPE STANDARD TABLE OF bapiadtel,
+      ls_phone        TYPE bapiadtel,
+      it_phonex       TYPE STANDARD TABLE OF bapiadtelx,
+      ls_phonex       TYPE bapiadtelx,
+      it_email        TYPE STANDARD TABLE OF bapiadsmtp,
+      it_email2       TYPE STANDARD TABLE OF bapiadsmtp,
+      ls_email        TYPE bapiadsmtp,
+      it_emailx       TYPE STANDARD TABLE OF bapiadsmtx,
+      ls_emailx       TYPE bapiadsmtx,
+      lv_bpartner     TYPE bapibus1006_head-bpartner,
+      it_return       TYPE STANDARD TABLE OF bapiret2.
+*          ls_bpartner     TYPE bapibus1006_head.
+DATA:lv_gstno TYPE bptaxnum.
+*    write : 'test' .
+
+DATA: ist_excelfile TYPE TABLE OF alsmex_tabline WITH HEADER LINE INITIAL SIZE 1,
+      wa_excelfile  TYPE alsmex_tabline.
+
+DATA : l_f_index TYPE sy-index  .
+
+DATA: lv_partner_guid TYPE but000-partner_guid,
+      lv_vendor       TYPE cvi_vend_link-vendor. "cvi_cust_link-customer.
+DATA: businesspartner          TYPE bapibus1006_head-bpartner,
+      business                 TYPE bapibus1006_head,
+      businesspartnerextern    TYPE bapibus1006_head-bpartner,
+      partnercategory          TYPE bapibus1006_head-partn_cat,  " BAPIBUS1006_BPROLES-PARTNERROLECATEGORY
+      partnergroup             TYPE bapibus1006_head-partn_grp,
+      persondata               TYPE bapibus1006_central_person,   " CENTRALDATAPERSON
+      persondatax              TYPE bapibus1006_central_person_x,   " CENTRALDATAPERSON
+      person                   TYPE bapibus1006_central,      " CENTRALDATA
+      personx                  TYPE bapibus1006_central_x,      " CENTRALDATA
+      organdata                TYPE bapibus1006_central_organ,   " CENTRALDATAORGANIZATION
+      organdatax               TYPE bapibus1006_central_organ_x,   " CENTRALDATAORGANIZATION
+      groupdata                TYPE bapibus1006_central_group,   " CENTRALDATAGROUP
+      addressdata              TYPE bapibus1006_address,   " ADDRESSDATA
+      partnerrole              TYPE bapibus1006_bproles-partnerrole,
+      centraldatagroup         TYPE bapibus1006_central_group,
+      centraldataorganization  TYPE bapibus1006_central_organ,
+      centraldataorganizationx TYPE bapibus1006_central_organ_x,
+      pcategory                TYPE bapibus1006_bproles-partnerrolecategory,
+      telefondata              LIKE bapiadtel OCCURS 0 WITH HEADER LINE,
+      telefondatax             LIKE bapiadtelx OCCURS 0 WITH HEADER LINE,
+      ls_telefondata           TYPE bapiadtel,
+      ls_telefondatax          TYPE bapiadtelx , " bapiadtel,
+      faxdata                  LIKE bapiadfax OCCURS 0 WITH HEADER LINE,
+      faxdatax                 LIKE bapiadfaxx OCCURS 0 WITH HEADER LINE,
+      ls_faxdata               TYPE bapiadfax,
+      ls_faxdatax              TYPE bapiadfaxx,
+*      FAXDATA                 like OCCURS 0 WITH HEADER LINE,
+      e_maildata               LIKE bapiadsmtp OCCURS 0 WITH HEADER LINE,
+      e_maildatax              LIKE bapiadsmtx OCCURS 0 WITH HEADER LINE,
+      ls_e_maildata            TYPE bapiadsmtp,
+      ls_e_maildatax           TYPE bapiadsmtx,
+      bankdetaildata           TYPE bapibus1006_bankdetail,
+      bankdetaildatax          TYPE bapibus1006_bankdetail_x,
+      lt_bankdetaildata        TYPE TABLE OF bapibus1006_bankdetails,
+      bankdetailsid            TYPE bapibus1006_head,
+      addressdatax             TYPE bapibus1006_address_x,
+      bapiret02                TYPE STANDARD TABLE OF  bapiret2.
+DATA BEGIN OF bapireturn OCCURS 1.
+INCLUDE STRUCTURE bapiret2.
+DATA END OF bapireturn.
+DATA BEGIN OF bapi_role OCCURS 1.
+INCLUDE STRUCTURE bapiret2.
+DATA END OF bapi_role.
+DATA BEGIN OF it_partnerrole OCCURS 1.
+INCLUDE STRUCTURE bapibusisb990_bproles.
+DATA END OF it_partnerrole.
+DATA is_partnerrole LIKE LINE OF  it_partnerrole.
+DATA: BEGIN OF bapiret2 OCCURS 1.
+        INCLUDE STRUCTURE bapiret2.
+DATA END OF bapiret2.
+
+FIELD-SYMBOLS : <fs> .
+
+SELECTION-SCREEN : BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+
+  PARAMETERS : p_file TYPE rlgrap-filename OBLIGATORY .
+*PARAMETERS ctumode LIKE ctu_params-dismode DEFAULT 'E'.
+
+SELECTION-SCREEN END OF BLOCK b1.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_file.
+
+  PERFORM openfile USING p_file.
+
+START-OF-SELECTION.
+
+  CALL FUNCTION 'ALSM_EXCEL_TO_INTERNAL_TABLE'
+    EXPORTING
+      filename                = p_file
+      i_begin_col             = '1'
+      i_begin_row             = '3'
+      i_end_col               = '60'
+      i_end_row               = '2000'
+    TABLES
+      intern                  = ist_excelfile
+    EXCEPTIONS
+      inconsistent_parameters = 1
+      upload_ole              = 2
+      OTHERS                  = 3.
+*** End generated data section ***
+
+  IF sy-subrc NE 0.
+    MESSAGE 'Enter Correct File' TYPE 'E' .""ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+  ENDIF.
+
+  IF NOT ist_excelfile[] IS INITIAL.
+
+    SORT ist_excelfile BY row col.
+
+    LOOP AT ist_excelfile.
+      MOVE : ist_excelfile-col TO   l_f_index.
+
+      ASSIGN COMPONENT l_f_index OF STRUCTURE wa_data TO <fs>.
+      MOVE : ist_excelfile-value TO <fs> .
+      AT END OF row.
+        APPEND wa_data TO lt_data.
+        CLEAR wa_data.
+      ENDAT.
+    ENDLOOP.
+  ENDIF.
+
+*****************************************************************************
+  BREAK abap .
+  LOOP AT lt_data INTO DATA(wa_itab).
+
+    IF wa_itab-bpno IS INITIAL .
+
+      MESSAGE 'BP Number not Entered !!' TYPE 'I' DISPLAY LIKE 'E'   .
+      LEAVE TO SCREEN 0.
+
+    ELSE .
+
+      CLEAR : businesspartnerextern , partnercategory , centraldataorganization , addressdata .
+
+      REFRESH :  bapireturn , e_maildata ,
+                        telefondata , e_maildata ,    faxdata.
+
+      CALL FUNCTION 'CONVERSION_EXIT_ALPHA_INPUT'
+        EXPORTING
+          input  = wa_itab-bpno
+        IMPORTING
+          output = wa_itab-bpno.
+
+      CALL FUNCTION 'BAPI_BUPA_CENTRAL_GETDETAIL'
+        EXPORTING
+          businesspartner         = wa_itab-bpno
+*         VALID_DATE              = SY-DATLO
+*         IV_REQ_MASK             = 'X'
+        IMPORTING
+          centraldata             = person
+          centraldataperson       = persondata
+          centraldataorganization = centraldataorganization
+*         CENTRALDATAGROUP        =
+*         CENTRALDATAVALIDITY     =
+        TABLES
+          telefondatanonaddress   = telefondata
+          faxdatanonaddress       = faxdata
+*         TELETEXDATANONADDRESS   =
+*         TELEXDATANONADDRESS     =
+          e_maildatanonaddress    = e_maildata
+*         RMLADDRESSDATANONADDRESS           =
+*         X400ADDRESSDATANONADDRESS          =
+*         RFCADDRESSDATANONADDRESS           =
+*         PRTADDRESSDATANONADDRESS           =
+*         SSFADDRESSDATANONADDRESS           =
+*         URIADDRESSDATANONADDRESS           =
+*         PAGADDRESSDATANONADDRESS           =
+*         COMMUNICATIONNOTESNONADDRESS       =
+*         COMMUNICATIONUSAGENONADDRESS       =
+          return                  = bapireturn.
+
+
+********************************************************************************
+*      IF wa_itab-anred IS NOT INITIAL.
+*        person-title_key      = wa_itab-anred .
+*        personx-title_key      = 'X' .
+*      ENDIF.
+*      IF wa_itab-sortl IS NOT INITIAL .
+*        person-searchterm1    = wa_itab-sortl.
+*        personx-searchterm1    = 'X'.
+*      ENDIF.
+*      IF wa_itab-sort2 IS NOT INITIAL .
+*        person-searchterm2    = wa_itab-sort2.
+*        personx-searchterm2    = 'X'.
+*      ENDIF.
+*
+*      " ORGANIZATION
+*      IF wa_itab-name1 IS NOT INITIAL .
+*        centraldataorganization-name1 = wa_itab-name1.
+*        centraldataorganizationx-name1 = 'X'.
+*      ENDIF.
+*      IF wa_itab-name2 IS NOT INITIAL .
+*        centraldataorganization-name2 = wa_itab-name2.
+*        centraldataorganizationx-name2 = 'X'.
+*      ENDIF.
+*      IF wa_itab-name3 IS NOT INITIAL .
+*        centraldataorganization-name3 = wa_itab-name3.
+*        centraldataorganizationx-name3 = 'X'.
+*      ENDIF.
+*      IF wa_itab-name4 IS NOT INITIAL .
+*        centraldataorganization-name4 = wa_itab-name4.
+*        centraldataorganizationx-name4 = 'X'.
+*      ENDIF.
+*
+**      WA_ITAB-TELF1
+*
+*      REFRESH : bapireturn .
+*
+*      CALL FUNCTION 'BAPI_BUPA_CENTRAL_CHANGE'
+*        EXPORTING
+*          businesspartner           = wa_itab-bpno
+*          centraldata               = person
+*          centraldataperson         = persondata
+*          centraldataorganization   = centraldataorganization
+**         CENTRALDATAGROUP          =
+*          centraldata_x             = personx
+*          centraldataperson_x       = persondatax
+*          centraldataorganization_x = centraldataorganizationx
+**         CENTRALDATAGROUP_X        =
+**         VALID_DATE                = SY-DATLO
+**         DUPLICATE_MESSAGE_TYPE    =
+**         DUPLICATE_CHECK_ADDRESS   =
+*        TABLES
+**         TELEFONDATANONADDRESS     =
+**         FAXDATANONADDRESS         =
+**         TELETEXDATANONADDRESS     =
+**         TELEXDATANONADDRESS       =
+**         E_MAILDATANONADDRESS      =
+**         RMLADDRESSDATANONADDRESS  =
+**         X400ADDRESSDATANONADDRESS =
+**         RFCADDRESSDATANONADDRESS  =
+**         PRTADDRESSDATANONADDRESS  =
+**         SSFADDRESSDATANONADDRESS  =
+**         URIADDRESSDATANONADDRESS  =
+**         PAGADDRESSDATANONADDRESS  =
+**         COMMUNICATIONNOTESNONADDRESS        =
+**         COMMUNICATIONUSAGENONADDRESS        =
+**         TELEFONDATANONADDRESSX    =
+**         FAXDATANONADDRESSX        =
+**         TELETEXDATANONADDRESSX    =
+**         TELEXDATANONADDRESSX      =
+**         E_MAILDATANONADDRESSX     =
+**         RMLADDRESSDATANONADDRESSX =
+**         X400ADDRESSDATANONADDRESSX          =
+**         RFCADDRESSDATANONADDRESSX =
+**         PRTADDRESSDATANONADDRESSX =
+**         SSFADDRESSDATANONADDRESSX =
+**         URIADDRESSDATANONADDRESSX =
+**         PAGADDRESSDATANONADDRESSX =
+**         COMMUNICATIONNOTESNONADDRESSX       =
+**         COMMUNICATIONUSAGENONADDRESSX       =
+*          return                    = bapireturn
+**         ADDRESSDUPLICATES         =
+*        .
+*
+*      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+*        EXPORTING
+*          wait = 'X'.
+*
+*      LOOP AT bapireturn INTO l_ret1.
+*        MOVE-CORRESPONDING l_ret1 TO ls_out .
+*        ls_out-sno = wa_itab-slno .
+*        APPEND ls_out TO lt_out .
+*      ENDLOOP.
+      REFRESH bapireturn.
+
+      CALL FUNCTION 'BAPI_BUPA_ADDRESS_GETDETAIL'
+        EXPORTING
+          businesspartner = wa_itab-bpno
+*         ADDRESSGUID     =
+*         VALID_DATE      = SY-DATLO
+*         RESET_BUFFER    =
+        IMPORTING
+          addressdata     = addressdata
+*         ADDRESS_DEP_ATTR_DATA       =
+        TABLES
+          bapiadtel       = telefondata
+          bapiadfax       = faxdata
+*         BAPIADTTX       =
+*         BAPIADTLX       =
+          bapiadsmtp      = e_maildata
+*         BAPIADRML       =
+*         BAPIADX400      =
+*         BAPIADRFC       =
+*         BAPIADPRT       =
+*         BAPIADSSF       =
+*         BAPIADURI       =
+*         BAPIADPAG       =
+*         BAPIAD_REM      =
+*         BAPICOMREM      =
+*         ADDRESSUSAGE    =
+*         BAPIADVERSORG   =
+*         BAPIADVERSPERS  =
+*         BAPIADUSE       =
+          return          = bapireturn.
+
+****      *   ADDRESSDATA
+***      IF wa_itab-stras IS NOT INITIAL .
+***        addressdata-street     = wa_itab-stras.
+***        addressdatax-street     = 'X'.
+***      ENDIF.
+***      IF wa_itab-street1 IS NOT INITIAL .
+***        addressdata-str_suppl1 = wa_itab-street1.
+***        addressdatax-str_suppl1 = 'X'.
+***      ENDIF.
+***
+***      IF wa_itab-street2 IS NOT INITIAL .
+***        addressdata-str_suppl2 = wa_itab-street2.
+***        addressdatax-str_suppl2 = 'X'.
+***      ENDIF.
+***      IF wa_itab-street3 IS NOT INITIAL.
+***        addressdata-str_suppl3 = wa_itab-street3.
+***        addressdatax-str_suppl3 = 'X'.
+***      ENDIF.
+***      IF wa_itab-ort01 IS NOT INITIAL .
+***        addressdata-city      =  wa_itab-ort01.
+***        addressdatax-city      =  'X'.
+***      ENDIF.
+***      IF wa_itab-pstlz IS  NOT INITIAL .
+***        addressdata-postl_cod1 = wa_itab-pstlz.
+***        addressdatax-postl_cod1 = 'X'.
+***      ENDIF.
+***      IF wa_itab-land1 IS NOT INITIAL .
+***        addressdata-country    = wa_itab-land1.
+***        addressdatax-country    = 'X'.
+***      ENDIF.
+***      IF wa_itab-regio IS NOT INITIAL .
+***        addressdata-region     = wa_itab-regio.
+***        addressdatax-region     = 'X'.
+***      ENDIF.
+
+      ls_telefondata-country    = addressdata-country.
+      ls_telefondata-countryiso = addressdata-country.
+      ls_telefondata-r_3_user   = '3'.
+      ls_telefondata-std_recip     = 'X'.
+
+      ls_telefondatax-country    = 'X'.
+      ls_telefondatax-countryiso = 'X'.
+
+      BREAK abap .
+
+      READ TABLE telefondata INTO ls_telefondata INDEX 1 .
+      IF ls_telefondata-telephone IS NOT INITIAL .
+
+        ls_telefondata-telephone  = wa_itab-telf1.
+        ls_telefondata-tel_no  = wa_itab-telf1.
+        ls_telefondata-caller_no  = wa_itab-telf1.
+        ls_telefondatax-telephone  = 'X'.
+        ls_telefondatax-tel_no  = 'X'.
+        ls_telefondatax-caller_no  = 'X'.
+        ls_telefondatax-updateflag  = 'U'.
+        MODIFY telefondata FROM ls_telefondata INDEX 1 .
+        MOVE-CORRESPONDING ls_telefondatax TO telefondatax .
+        APPEND telefondatax .
+        APPEND ls_telefondatax  TO telefondatax .
+      ELSE.
+
+        ls_telefondata-telephone  = wa_itab-telf1.
+        ls_telefondata-tel_no  = wa_itab-telf1.
+        ls_telefondata-caller_no  = wa_itab-telf1.
+        ls_telefondatax-telephone  = 'X'.
+        ls_telefondatax-tel_no  = 'X'.
+        ls_telefondatax-caller_no  = 'X'.
+        ls_telefondatax-updateflag  = 'I'.
+        MODIFY telefondata FROM ls_telefondata INDEX 1 .
+        MOVE-CORRESPONDING ls_telefondatax TO telefondatax .
+        APPEND telefondatax .
+        APPEND ls_telefondata TO telefondata .
+**      CLEAR : ls_telefondata , ls_telefondatax .
+      ENDIF.
+
+      CLEAR : ls_telefondata-telephone , ls_telefondata-r_3_user.
+
+      READ TABLE telefondata INTO ls_telefondata INDEX 2 .
+      IF ls_telefondata-telephone IS NOT INITIAL .
+
+        ls_telefondata-telephone  = wa_itab-telf2.
+        ls_telefondata-tel_no  = wa_itab-telf2.
+        ls_telefondata-caller_no  = wa_itab-telf2.
+        ls_telefondatax-telephone  = 'X'.
+        ls_telefondatax-tel_no  = 'X'.
+        ls_telefondatax-caller_no  = 'X'.
+        ls_telefondatax-updateflag  = 'U'.
+        MODIFY telefondata FROM ls_telefondata INDEX 2 .
+        MOVE-CORRESPONDING ls_telefondatax TO telefondatax .
+        APPEND telefondatax .
+*        CLEAR : ls_telefondata , ls_telefondataX .
+*        APPEND ls_telefondatax  TO telefondatax .
+      ELSE.
+        ls_telefondata-telephone  = wa_itab-telf2.
+        ls_telefondata-tel_no  = wa_itab-telf2.
+        ls_telefondata-caller_no  = wa_itab-telf2.
+        ls_telefondatax-telephone  = 'X'.
+        ls_telefondatax-tel_no  = 'X'.
+        ls_telefondatax-caller_no  = 'X'.
+        ls_telefondatax-updateflag  = 'I'.
+*        MODIFY telefondata FROM ls_telefondata INDEX 2 .
+        MOVE-CORRESPONDING ls_telefondatax TO telefondatax .
+        APPEND telefondatax .
+        APPEND ls_telefondata TO telefondata .
+      ENDIF .
+*      APPEND LS_TELEFONDATA TO TELEFONDATA.
+
+      READ TABLE faxdata INTO ls_faxdata INDEX 1 .
+      IF ls_faxdata IS NOT INITIAL .
+
+        ls_faxdata-country    = addressdata-country.
+        ls_faxdatax-country    = 'X'.
+        ls_faxdata-countryiso = addressdata-country.
+        ls_faxdatax-countryiso = 'X'.
+        ls_faxdata-std_recip = 'X'.
+        ls_faxdata-fax = wa_itab-telfx.
+        ls_faxdatax-fax = 'X'.
+        ls_faxdatax-updateflag = 'U'.
+        MODIFY   faxdata FROM ls_faxdata INDEX 1 .
+*        APPEND LS_FAXDATA TO  FAXDATA.
+        APPEND ls_faxdatax TO  faxdatax.
+      ELSE.
+        ls_faxdata-country    = addressdata-country.
+        ls_faxdatax-country    = 'X'.
+        ls_faxdata-countryiso = addressdata-country.
+        ls_faxdatax-countryiso = 'X'.
+        ls_faxdatax-std_recip = 'X'.
+        ls_faxdata-fax = wa_itab-telfx.
+        ls_faxdatax-fax = 'X'.
+        ls_faxdatax-updateflag = 'I'.
+
+        MOVE-CORRESPONDING ls_faxdatax TO faxdatax .
+
+*      MODIFY   faxdata FROM ls_faxdata INDEX 1 .
+        APPEND ls_faxdata TO  faxdata.
+        APPEND ls_faxdatax TO  faxdatax.
+      ENDIF .
+
+      READ TABLE e_maildata INTO ls_e_maildata INDEX 1 ..
+      IF ls_e_maildata IS NOT INITIAL .
+
+        ls_e_maildata-e_mail = wa_itab-smtp_addr.
+        ls_e_maildatax-e_mail = 'X'.
+        ls_e_maildatax-updateflag = 'U'.
+        MODIFY  e_maildata FROM ls_e_maildata INDEX 1 ..
+        APPEND ls_e_maildatax TO e_maildatax.
+        CLEAR ls_e_maildata.
+        CLEAR ls_e_maildatax.
+
+      ELSE .
+
+        ls_e_maildata-e_mail = wa_itab-smtp_addr.
+        ls_e_maildatax-e_mail = 'X'.
+        ls_e_maildatax-updateflag = 'I'.
+
+*      MODIFY  e_maildata FROM ls_e_maildata INDEX 1 ..
+        APPEND ls_e_maildatax TO e_maildatax.
+        APPEND ls_e_maildata TO e_maildata.
+        CLEAR ls_e_maildata.
+        CLEAR ls_e_maildatax.
+
+      ENDIF.
+
+      REFRESH bapireturn.
+      CALL FUNCTION 'BAPI_BUPA_ADDRESS_CHANGE'
+        EXPORTING
+          businesspartner = wa_itab-bpno
+*         ADDRESSGUID     =
+          addressdata     = addressdata
+          addressdata_x   = addressdatax
+*         DUPLICATE_MESSAGE_TYPE        =
+*         ACCEPT_ERROR    = ' '
+*         ADDRESS_DEP_ATTR_DATA         =
+*         ADDRESS_DEP_ATTR_DATA_X       =
+        TABLES
+          bapiadtel       = telefondata
+          bapiadfax       = faxdata
+*         BAPIADTTX       =
+*         BAPIADTLX       =
+          bapiadsmtp      = e_maildata
+*         BAPIADRML       =
+*         BAPIADX400      =
+*         BAPIADRFC       =
+*         BAPIADPRT       =
+*         BAPIADSSF       =
+*         BAPIADURI       =
+*         BAPIADPAG       =
+*         BAPIAD_REM      =
+*         BAPICOMREM      =
+*         ADDRESSUSAGE    =
+*         BAPIADVERSORG   =
+*         BAPIADVERSPERS  =
+*         BAPIADUSE       =
+          bapiadtel_x     = telefondatax
+          bapiadfax_x     = faxdatax
+*         BAPIADTTX_X     =
+*         BAPIADTLX_X     =
+          bapiadsmt_x     = e_maildatax
+*         BAPIADRML_X     =
+*         BAPIADX40_X     =
+*         BAPIADRFC_X     =
+*         BAPIADPRT_X     =
+*         BAPIADSSF_X     =
+*         BAPIADURI_X     =
+*         BAPIADPAG_X     =
+*         BAPIAD_RE_X     =
+*         BAPICOMRE_X     =
+*         ADDRESSUSAGE_X  =
+*         BAPIADVERSORG_X =
+*         BAPIADVERSPERS_X              =
+*         BAPIADUSE_X     =
+          return          = bapireturn
+*         ADDRESSDUPLICATES             =
+        .
+      DELETE bapireturn WHERE type EQ 'W'.
+
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = 'X'.
+
+      LOOP AT bapireturn INTO data(l_ret1).
+        MOVE-CORRESPONDING l_ret1 TO ls_out .
+        ls_out-sno = wa_itab-slno .
+        APPEND ls_out TO lt_out .
+      ENDLOOP.
+      REFRESH bapireturn.
+    ENDIF.
+    REFRESH : bapireturn,
+              e_maildata,
+              telefondata,
+              e_maildata,
+              faxdata.
+*    LOOP AT BAPIRETURN INTO DATA(L_RET) .
+*      WRITE : L_RET-MESSAGE .
+*    ENDLOOP.
+    IF businesspartner IS NOT INITIAL OR wa_itab-bpno IS NOT INITIAL   .
+
+      CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+        EXPORTING
+          wait = 'X'
+* IMPORTING
+*         RETURN        =
+        .
+******************************************************
+      IF wa_itab-partnerrole1 IS NOT INITIAL AND businesspartner IS NOT INITIAL   .
+        CLEAR : partnerrole .
+        partnerrole = wa_itab-partnerrole1 .
+        CALL FUNCTION 'BAPI_BUPA_ROLE_ADD_2'
+          EXPORTING
+            businesspartner     = businesspartner
+            businesspartnerrole = partnerrole
+          TABLES
+            return              = bapi_role.
+        IF sy-subrc NE 0.
+          CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+        ELSE.
+          CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+            EXPORTING
+              wait = 'X'.
+        ENDIF.
+      ENDIF.
+
+      IF wa_itab-partnerrole2 IS NOT INITIAL  AND businesspartner IS NOT INITIAL  .
+        CLEAR : partnerrole.
+        partnerrole = wa_itab-partnerrole2 .
+        CALL FUNCTION 'BAPI_BUPA_ROLE_ADD_2'
+          EXPORTING
+            businesspartner     = businesspartner
+            businesspartnerrole = partnerrole
+          TABLES
+            return              = bapi_role.
+        IF sy-subrc NE 0.
+          CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+        ELSE.
+          CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+            EXPORTING
+              wait = 'X'.
+        ENDIF.
+      ENDIF.
+
+      IF wa_itab-partnerrole3 IS NOT INITIAL AND businesspartner IS NOT INITIAL  .
+        CLEAR : partnerrole .
+        partnerrole = wa_itab-partnerrole3 .
+        CALL FUNCTION 'BAPI_BUPA_ROLE_ADD_2'
+          EXPORTING
+            businesspartner     = businesspartner
+            businesspartnerrole = partnerrole
+          TABLES
+            return              = bapi_role.
+        IF sy-subrc NE 0.
+          CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+        ELSE.
+          CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+            EXPORTING
+              wait = 'X'.
+        ENDIF.
+
+      ENDIF.
+
+      DATA : lv_taxnumber TYPE bapibus1006tax-taxnumber.
+      DATA: lv_taxtype  TYPE bapibus1006tax-taxtype,
+            lv_industry TYPE bapibus1006_industrysector-industrysector..
+
+      lv_taxnumber = wa_itab-taxnumber.
+
+      IF  wa_itab-bpno = ''.
+
+
+        "" Bank details
+        REFRESH bapireturn[]. CLEAR bankdetaildata.
+
+        bankdetaildata-bank_ctry     =  wa_itab-banks.
+        bankdetaildata-bank_ctryiso  =  wa_itab-banks.
+        bankdetaildata-bank_key      =  wa_itab-bankl. "'000022000'.
+        bankdetaildata-ctrl_key      =  wa_itab-cntrl_key.
+        bankdetaildata-bank_ref      =  wa_itab-bkref.
+*      bankdetaildata-externalbankid =  wa_itab-bkext.
+        bankdetaildata-bank_acct      =  wa_itab-bankn.
+        bankdetaildata-accountholder  =  wa_itab-koinh.
+        bankdetaildata-bankaccountname =  wa_itab-accname.
+
+        CALL FUNCTION 'BAPI_BUPA_BANKDETAIL_ADD'
+          EXPORTING
+            businesspartner = businesspartner
+*           bankdetailid    = bankdetailsid
+            bankdetaildata  = bankdetaildata
+          TABLES
+            return          = bapireturn.
+        IF sy-subrc NE 0.
+          CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+        ELSE.
+          CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+            EXPORTING
+              wait = 'X'.
+        ENDIF.
+        LOOP AT bapireturn INTO l_ret1.
+          MOVE-CORRESPONDING l_ret1 TO ls_out .
+          ls_out-sno = wa_itab-slno .
+          APPEND ls_out TO lt_out .
+        ENDLOOP.
+        REFRESH bapireturn.
+
+        lv_taxtype = 'IN3'.
+        lv_taxnumber = wa_itab-taxnumber.
+
+        CALL FUNCTION 'BAPI_BUPA_TAX_ADD'
+          EXPORTING
+            businesspartner = businesspartner
+            taxtype         = lv_taxtype " IN3
+            taxnumber       = lv_taxnumber "wa_itab-taxnumber   "(20) DFKKBPTAXNUM-TAXNUMXL
+          TABLES
+            return          = bapiret2.
+
+        IF sy-subrc NE 0.
+          CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+        ELSE.
+          CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+            EXPORTING
+              wait = 'X'.
+        ENDIF.
+
+        LOOP AT bapiret2 INTO l_ret1.
+          MOVE-CORRESPONDING l_ret1 TO ls_out .
+          ls_out-sno = wa_itab-slno .
+          APPEND ls_out TO lt_out .
+        ENDLOOP.
+        REFRESH: bapireturn , bapiret2.
+
+      ELSE.
+
+*        IF lv_taxnumber IS NOT INITIAL.
+*          lv_taxtype = 'IN3'.
+*          lv_taxnumber = wa_itab-taxnumber.
+*
+*          CALL FUNCTION 'BAPI_BUPA_TAX_CHANGE'
+*            EXPORTING
+*              businesspartner = wa_itab-bpno
+*              taxtype         = lv_taxtype
+*              taxnumber       = lv_taxnumber
+*            TABLES
+*              return          = bapiret2.
+*
+*          IF sy-subrc NE 0.
+*            CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+*          ELSE.
+*            CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+*              EXPORTING
+*                wait = 'X'.
+*          ENDIF.
+*          .
+*          LOOP AT bapiret2 INTO l_ret1.
+*            MOVE-CORRESPONDING l_ret1 TO ls_out .
+*            ls_out-sno = wa_itab-slno .
+*            APPEND ls_out TO lt_out .
+*          ENDLOOP.
+*          REFRESH: bapireturn , bapiret2.
+*        ENDIF.
+
+
+
+        CALL FUNCTION 'BAPI_BUPA_BANKDETAILS_GET'
+          EXPORTING
+            businesspartner = wa_itab-bpno
+*           VALID_DATE      = SY-DATLO
+          TABLES
+            bankdetails     = lt_bankdetaildata
+            return          = bapiret2.
+
+        READ TABLE lt_bankdetaildata INTO DATA(ls_bankdetaildata) INDEX 1.
+        IF sy-subrc = 0  .
+          IF wa_itab-banks IS NOT INITIAL .
+            bankdetaildata-bank_ctry     =  wa_itab-banks.
+            bankdetaildatax-bank_ctry     =  'X'.
+          ENDIF.
+          IF wa_itab-banks IS NOT INITIAL .
+            bankdetaildata-bank_ctryiso  =  wa_itab-banks.
+            bankdetaildatax-bank_ctryiso  =  'X'.
+          ENDIF.
+          IF wa_itab-bankn IS NOT INITIAL .
+            bankdetaildata-bank_key      = wa_itab-bankn ." WA_ITAB-BANKL . CHANGED BY KHAYATI / 29.06.2024
+            bankdetaildatax-bank_key      = 'X'.
+          ENDIF.
+          "'000022000'.
+          IF wa_itab-cntrl_key IS NOT INITIAL .
+            bankdetaildata-ctrl_key      =  wa_itab-cntrl_key.
+            bankdetaildatax-ctrl_key      =  'X' .
+          ENDIF.
+
+          IF wa_itab-bkref IS NOT INITIAL .
+            bankdetaildata-bank_ref      =  wa_itab-bkref.
+            bankdetaildatax-bank_ref      = 'X'.
+          ENDIF.
+
+*      bankdetaildata-externalbankid =  wa_itab-bkext.
+          IF wa_itab-bankl IS NOT INITIAL .
+            bankdetaildata-bank_acct      =  wa_itab-bankl. " WA_ITAB-BANKN " CHANGED BY KHAYATI / 29.06.2024
+            bankdetaildatax-bank_acct      =  'X'.
+          ENDIF.
+          IF wa_itab-koinh IS NOT INITIAL .
+            bankdetaildata-accountholder  =  wa_itab-koinh.
+            bankdetaildatax-accountholder  =  'X'.
+          ENDIF.
+          IF wa_itab-accname IS NOT INITIAL .
+            bankdetaildata-bankaccountname =  wa_itab-accname.
+            bankdetaildatax-bankaccountname =  'X'.
+          ENDIF.
+          CALL FUNCTION 'BAPI_BUPA_BANKDETAIL_CHANGE'
+            EXPORTING
+              businesspartner  = wa_itab-bpno
+              bankdetailid     = ls_bankdetaildata-bankdetailid
+              bankdetaildata   = bankdetaildata
+              bankdetaildata_x = bankdetaildatax
+            TABLES
+              return           = bapiret2.
+
+          IF sy-subrc NE 0.
+            CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+          ELSE.
+            CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+              EXPORTING
+                wait = 'X'.
+          ENDIF.
+
+          LOOP AT bapiret2 INTO l_ret1.
+            MOVE-CORRESPONDING l_ret1 TO ls_out .
+            ls_out-sno = wa_itab-slno .
+            APPEND ls_out TO lt_out .
+          ENDLOOP.
+          REFRESH: bapireturn , bapiret2.
+        ELSE .
+          IF wa_itab-banks IS NOT INITIAL .
+            bankdetaildata-bank_ctry     =  wa_itab-banks.
+            bankdetaildatax-bank_ctry     =  'X'.
+          ENDIF.
+          IF wa_itab-banks IS NOT INITIAL .
+            bankdetaildata-bank_ctryiso  =  wa_itab-banks.
+            bankdetaildatax-bank_ctryiso  =  'X'.
+          ENDIF.
+          IF wa_itab-bankl IS NOT INITIAL .
+            bankdetaildata-bank_key      = wa_itab-bankn . "  WA_ITAB-BANKL. " changed by khayati / 04.07.2024
+            bankdetaildatax-bank_key      = 'X'.
+          ENDIF.
+          "'000022000'.
+          IF wa_itab-cntrl_key IS NOT INITIAL .
+            bankdetaildata-ctrl_key      =  wa_itab-cntrl_key.
+            bankdetaildatax-ctrl_key      =  'X' .
+          ENDIF.
+
+          IF wa_itab-bkref IS NOT INITIAL .
+            bankdetaildata-bank_ref      =  wa_itab-bkref.
+            bankdetaildatax-bank_ref      = 'X'.
+          ENDIF.
+
+*      bankdetaildata-externalbankid =  wa_itab-bkext.
+          IF wa_itab-bankn IS NOT INITIAL .
+            bankdetaildata-bank_acct      =  wa_itab-bankl . " WA_ITAB-BANKN. " changed by khayati / 04.07.2024
+            bankdetaildatax-bank_acct      =  'X'.
+          ENDIF.
+          IF wa_itab-koinh IS NOT INITIAL .
+            bankdetaildata-accountholder  =  wa_itab-koinh.
+            bankdetaildatax-accountholder  =  'X'.
+          ENDIF.
+          IF wa_itab-accname IS NOT INITIAL .
+            bankdetaildata-bankaccountname =  wa_itab-accname.
+            bankdetaildatax-bankaccountname =  'X'.
+          ENDIF.
+
+          CALL FUNCTION 'BAPI_BUPA_BANKDETAIL_ADD'
+            EXPORTING
+              businesspartner = wa_itab-bpno
+*             bankdetailid    = bankdetailsid
+              bankdetaildata  = bankdetaildata
+            TABLES
+              return          = bapireturn.
+          IF sy-subrc NE 0.
+            CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+          ELSE.
+            CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+              EXPORTING
+                wait = 'X'.
+          ENDIF.
+          LOOP AT bapireturn INTO l_ret1.
+            MOVE-CORRESPONDING l_ret1 TO ls_out .
+            ls_out-sno = wa_itab-slno .
+            APPEND ls_out TO lt_out .
+          ENDLOOP.
+          REFRESH: bapireturn , bapiret2.
+        ENDIF.
+      ENDIF .
+
+*********************************************
+      IF wa_itab-j_1ipanno IS NOT INITIAL .
+        DATA : ls_j1 TYPE j_1imovend .
+        IF businesspartner IS NOT INITIAL .
+          ls_j1-lifnr = businesspartner .
+        ELSEIF wa_itab-bpno IS NOT INITIAL   .
+          ls_j1-lifnr = wa_itab-bpno .
+        ENDIF.
+        ls_j1-j_1ipanno = wa_itab-j_1ipanno .
+*        J_1IMOVEND_SAVE
+        CALL FUNCTION 'J_1IMOVEND_SAVE'
+          EXPORTING
+            tj_1imovend = ls_j1.
+
+      ENDIF.
+*    bankdetailsid-bankdetailid = '0001'. "wa_itab-bankid.
+      IF businesspartner IS NOT INITIAL AND wa_itab-industry IS NOT INITIAL .
+
+        lv_industry = wa_itab-industry.
+        CALL FUNCTION 'BAPI_INDUSTRYSECTOR_ADD'
+          EXPORTING
+            businesspartner         = businesspartner
+            industrysectorkeysystem = '0001'
+            industrysector          = lv_industry
+            defaultindustry         = 'X'
+          TABLES
+            return                  = bapiret02.
+        IF sy-subrc NE 0.
+          CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+        ELSE.
+          CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+            EXPORTING
+              wait = 'X'.
+        ENDIF.
+
+        LOOP AT bapiret02 INTO l_ret1.
+          MOVE-CORRESPONDING l_ret1 TO ls_out .
+          ls_out-sno = wa_itab-slno .
+          APPEND ls_out TO lt_out .
+        ENDLOOP.
+
+        REFRESH: bapireturn , bapiret2 , bapiret02.
+
+      ENDIF.
+******************************************************
+    ELSE .
+      CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'.
+
+    ENDIF.
+
+
+  ENDLOOP.
+  IF lt_out IS NOT INITIAL .
+    DATA : lt_fcat TYPE slis_t_fieldcat_alv,
+           ls_fcat LIKE LINE OF lt_fcat.
+
+    CALL FUNCTION 'REUSE_ALV_FIELDCATALOG_MERGE'
+      EXPORTING
+*       I_PROGRAM_NAME   =
+*       I_INTERNAL_TABNAME           =
+        i_structure_name = 'BAPIRET2'
+*       I_CLIENT_NEVER_DISPLAY       = 'X'
+*       I_INCLNAME       =
+*       I_BYPASSING_BUFFER           =
+*       I_BUFFER_ACTIVE  =
+      CHANGING
+        ct_fieldcat      = lt_fcat
+*     EXCEPTIONS
+*       INCONSISTENT_INTERFACE       = 1
+*       PROGRAM_ERROR    = 2
+*       OTHERS           = 3
+      .
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+    READ TABLE lt_fcat INTO ls_fcat INDEX 1.
+    ls_fcat-seltext_l = 'S No.' .
+    ls_fcat-seltext_m = 'S No.' .
+    ls_fcat-seltext_s = 'S No.' .
+    INSERT ls_fcat INTO lt_fcat INDEX 1 .
+
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+      EXPORTING
+*       I_INTERFACE_CHECK  = ' '
+*       I_BYPASSING_BUFFER = ' '
+*       I_BUFFER_ACTIVE    = ' '
+        i_callback_program = sy-repid
+*       I_CALLBACK_PF_STATUS_SET          = ' '
+*       I_CALLBACK_USER_COMMAND           = ' '
+*       I_CALLBACK_TOP_OF_PAGE            = ' '
+*       I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*       I_CALLBACK_HTML_END_OF_LIST       = ' '
+*       I_STRUCTURE_NAME   =
+*       I_BACKGROUND_ID    = ' '
+*       I_GRID_TITLE       =
+*       I_GRID_SETTINGS    =
+*       IS_LAYOUT          =
+        it_fieldcat        = lt_fcat
+*       IT_EXCLUDING       =
+*       IT_SPECIAL_GROUPS  =
+*       IT_SORT            =
+*       IT_FILTER          =
+*       IS_SEL_HIDE        =
+*       I_DEFAULT          = 'X'
+*       I_SAVE             = ' '
+*       IS_VARIANT         =
+*       IT_EVENTS          =
+*       IT_EVENT_EXIT      =
+*       IS_PRINT           =
+*       IS_REPREP_ID       =
+*       I_SCREEN_START_COLUMN             = 0
+*       I_SCREEN_START_LINE               = 0
+*       I_SCREEN_END_COLUMN               = 0
+*       I_SCREEN_END_LINE  = 0
+*       I_HTML_HEIGHT_TOP  = 0
+*       I_HTML_HEIGHT_END  = 0
+*       IT_ALV_GRAPHICS    =
+*       IT_HYPERLINK       =
+*       IT_ADD_FIELDCAT    =
+*       IT_EXCEPT_QINFO    =
+*       IR_SALV_FULLSCREEN_ADAPTER        =
+*       O_PREVIOUS_SRAL_HANDLER           =
+*     IMPORTING
+*       E_EXIT_CAUSED_BY_CALLER           =
+*       ES_EXIT_CAUSED_BY_USER            =
+      TABLES
+        t_outtab           = lt_out
+*     EXCEPTIONS
+*       PROGRAM_ERROR      = 1
+*       OTHERS             = 2
+      .
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+
+*    MESSAGE 'update was successful.' TYPE 'S' .
+  ENDIF.
+*****************************************************************************
+FORM openfile  USING   f_file TYPE rlgrap-filename.
+  CALL FUNCTION 'KD_GET_FILENAME_ON_F4'
+* EXPORTING
+*   PROGRAM_NAME        = SYST-REPID
+*   DYNPRO_NUMBER       = SYST-DYNNR
+*   FIELD_NAME          = ' '
+*   STATIC              = ' '
+*   MASK                = ' '
+*   FILEOPERATION       = 'R'
+    CHANGING
+      file_name     = f_file
+*     LOCATION_FLAG = 'P'
+    EXCEPTIONS
+      mask_too_long = 1
+      OTHERS        = 2.
+  IF sy-subrc <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+  ENDIF.
+ENDFORM.
